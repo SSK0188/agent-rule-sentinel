@@ -151,6 +151,35 @@ def _atomic_write(path: Path, content: str) -> None:
             os.unlink(temporary)
 
 
+BACKUP_GITIGNORE = '*\n!.gitignore\n'
+
+
+def _ensure_backup_gitignore(backup_root: Path) -> None:
+    """Keep newly written backup snapshots out of ordinary Git staging."""
+    ignore = backup_root / '.gitignore'
+    if ignore.is_symlink() or (ignore.exists() and not ignore.is_file()):
+        raise GuardError(f'Refusing unsafe backup ignore file: {ignore}')
+    if ignore.exists():
+        try:
+            with ignore.open('r', encoding='utf-8', newline='') as stream:
+                contents = stream.read()
+        except (UnicodeDecodeError, OSError) as error:
+            raise GuardError(f'Cannot read backup ignore file {ignore}: {error}') from error
+        if contents != BACKUP_GITIGNORE:
+            raise GuardError(
+                f'Custom backup ignore rules at {ignore}; refusing to save '
+                'potentially sensitive backups without a verified Git guard.'
+            )
+        return
+    try:
+        with ignore.open('x', encoding='utf-8', newline='') as stream:
+            stream.write(BACKUP_GITIGNORE)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except FileExistsError as error:
+        raise GuardError(f'Backup ignore file changed concurrently: {ignore}') from error
+
+
 def apply(root: Path, changes: list[Change]) -> str | None:
     """Back up existing targets first, then apply. No partial writes on preflight error."""
     dirty = [change for change in changes if change.dirty]
@@ -169,6 +198,7 @@ def apply(root: Path, changes: list[Change]) -> str | None:
     # Refuse permissive or symlinked backup folder. Original targets may contain secrets.
     if backup_root.is_symlink() or stat.S_IMODE(backup_root.stat().st_mode) & 0o077:
         raise GuardError('Backup directory must be private (mode 0700).')
+    _ensure_backup_gitignore(backup_root)
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     ident = stamp + '-' + secrets.token_hex(4)
     backup_dir = backup_root / ident
