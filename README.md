@@ -18,8 +18,12 @@ Developers working across multiple coding agents often duplicate project rules. 
 - Existing custom text outside managed markers is preserved.
 - Existing targets are privately backed up before replacement; newly created targets are not backed up.
 - `check` detects drift for CI, returning status 1 when a target needs synchronization.
+- Read-only `doctor`, safe import (`adopt`), conflict-aware restore (`undo`) in the development branch.
+- Opt-in Gemini CLI (`GEMINI.md`) project instruction support.
 - Refuses symlink targets, malformed markers, oversized files and several recognizable credential patterns.
 - No background watcher or automatic commits, push, network calls, or AI model execution.
+
+**Version note:** The commands below marked 0.2.0.dev0 exist on the unreleased `main` development branch, **not** in the published `v0.1.0` tag.
 
 **Security scope:** The credential detector is heuristic, not an exhaustive secret scanner. Review the source and diffs before committing generated files. Backups may contain sensitive content and are ignored by Git.
 
@@ -56,6 +60,53 @@ agent-rule-sentinel sync --target claude --apply
 agent-rule-sentinel --root /path/to/project check
 ```
 
+
+### New development commands (unreleased 0.2.0.dev0)
+
+**Adopt existing rules before running init.** If a project has an unmanaged AGENTS.md but no shared source, you can import it without modifying AGENTS.md:
+
+~~~bash
+agent-rule-sentinel adopt --target codex          # preview (size and SHA-256)
+agent-rule-sentinel adopt --target codex --apply  # create canonical source
+~~~
+
+Adoption refuses existing canonical source files, managed markers, symlinks and recognizable secret patterns. It **does not** translate tool-specific syntax or merge conflicting rules. Review the imported content before syncing to other assistants.
+
+**Diagnose project health without changing files:**
+
+~~~bash
+agent-rule-sentinel doctor
+agent-rule-sentinel doctor --json
+~~~
+
+Exit code: 0 = targets synchronized; 1 = drift; 2 = invalid input or missing source. Diagnose only the default Codex/Claude targets unless you select others.
+
+**Preview and restore a newer backup snapshot:**
+
+~~~bash
+agent-rule-sentinel undo                  # show restore plan, do not write
+agent-rule-sentinel undo --apply          # restore only unchanged destinations
+agent-rule-sentinel undo --target codex --apply
+agent-rule-sentinel undo --snapshot SNAPSHOT_NAME
+~~~
+
+Backups created by this development version include an integrity-checked manifest recording previous and generated file hashes. Undo refuses to overwrite files modified after sync, and can remove newly created target files if they are still unchanged. **Old backups without manifests must be restored manually.** Previews can display sensitive content; do not share private diff output.
+
+**Opt in to Gemini CLI project rules:**
+
+~~~bash
+agent-rule-sentinel plan --target gemini
+agent-rule-sentinel sync --target gemini --apply
+agent-rule-sentinel check --all
+~~~
+
+For compatibility, default sync still covers only Codex and Claude. Gemini CLI normally uses `GEMINI.md` at the project level, but users can configure other context filenames; imports and provider-specific directives are not converted.
+
+**Integrate drift detection with GitHub Actions.** Copy [the example workflow](examples/github-actions-agent-rules.yml) into your own project's `.github/workflows/` folder and commit the canonical source and selected managed files first. The sample currently installs from the development branch; **pin a tested release or commit** before production use.
+
+**Installation / packaging:** CI validates wheel and source-distribution builds, but **there is no PyPI release**. For now, clone the GitHub repo and install from its source checkout via `python -m pip install -e .`.
+
+
 ### What happens to my existing files?
 
 If `AGENTS.md` or `CLAUDE.md` does not exist, the tool creates it **only with `sync --apply`**. If it exists without the tool's markers, the tool **appends** a marked block, preserving earlier content. Subsequent synchronizations replace only the marked block. If markers are malformed or duplicated, the tool stops rather than guessing.
@@ -82,6 +133,7 @@ The command returns 0 when synchronized, 1 for drift, 2 for invalid or unsafe in
 | --- | --- | --- |
 | OpenAI Codex | `AGENTS.md` | Synced managed block |
 | Claude Code | `CLAUDE.md` | Synced managed block |
+| Gemini CLI (optional; development) | `GEMINI.md` | Synced managed block with `--target gemini` or `--all` |
 
 The project does not claim to synchronize user-level settings, provider memories, skills, personal conversations, token budgets, or cloud accounts. It does not translate between agent-specific syntax; write common, portable Markdown rules in the canonical source.
 
