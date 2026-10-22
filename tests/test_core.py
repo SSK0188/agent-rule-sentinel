@@ -1,11 +1,13 @@
 import os
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from agent_rule_sentinel.core import (
-    SOURCE, TARGETS, START, END, GuardError, apply, initialize,
+    SOURCE, TARGETS, START, END, BACKUP_GITIGNORE, GuardError, apply, initialize,
     plan, preview, render, validate_source,
 )
 from agent_rule_sentinel.cli import main
@@ -142,6 +144,54 @@ class ProjectTest(unittest.TestCase):
         self.assertEqual(saved.read_text(), 'previous\n')
         self.assertEqual(saved.stat().st_mode & 0o777, 0o600)
         self.assertEqual(Path(result).parent.stat().st_mode & 0o777, 0o700)
+
+    def test_git_add_all_excludes_sensitive_backup_snapshots(self):
+        if not shutil.which('git'):
+            self.skipTest('Git CLI unavailable')
+        subprocess.run(['git', 'init', '-q'], cwd=self.root, check=True)
+        original = '# My existing private project notes\nDo not publish internal paths\n'
+        (self.root / 'AGENTS.md').write_text(original, encoding='utf-8')
+        backup_dir = Path(apply(self.root, plan(self.root, ('codex',))))
+        ignore = backup_dir.parent / '.gitignore'
+        self.assertEqual(ignore.read_text(encoding='utf-8'), BACKUP_GITIGNORE)
+        self.assertEqual((backup_dir / 'AGENTS.md').read_text(encoding='utf-8'), original)
+        subprocess.run(['git', 'add', '.'], cwd=self.root, check=True)
+        staged = subprocess.check_output(
+            ['git', 'ls-files', '--cached'], cwd=self.root, text=True
+        ).splitlines()
+        self.assertIn('AGENTS.md', staged)
+        self.assertIn('.agent-rule-sentinel/source.md', staged)
+        self.assertIn('.agent-rule-sentinel/backups/.gitignore', staged)
+        self.assertNotIn(
+            '.agent-rule-sentinel/backups/' + backup_dir.name + '/AGENTS.md',
+            staged,
+        )
+
+    def test_custom_backup_gitignore_refused_without_overwrite(self):
+        backup_root = self.root / '.agent-rule-sentinel/backups'
+        backup_root.mkdir(mode=0o700)
+        ignore = backup_root / '.gitignore'
+        ignore.write_text('*.tmp\n', encoding='utf-8')
+        target = self.root / 'AGENTS.md'
+        target.write_text('keep me\n', encoding='utf-8')
+        with self.assertRaisesRegex(GuardError, 'Custom backup ignore rules'):
+            apply(self.root, plan(self.root, ('codex',)))
+        self.assertEqual(ignore.read_text(encoding='utf-8'), '*.tmp\n')
+        self.assertEqual(target.read_text(encoding='utf-8'), 'keep me\n')
+        self.assertEqual(list(backup_root.iterdir()), [ignore])
+
+    def test_backup_gitignore_symlink_refused(self):
+        backup_root = self.root / '.agent-rule-sentinel/backups'
+        backup_root.mkdir(mode=0o700)
+        destination = self.root / 'outside-ignore.txt'
+        destination.write_text('do not modify\n', encoding='utf-8')
+        (backup_root / '.gitignore').symlink_to(destination)
+        target = self.root / 'AGENTS.md'
+        target.write_text('keep me\n', encoding='utf-8')
+        with self.assertRaisesRegex(GuardError, 'unsafe backup ignore file'):
+            apply(self.root, plan(self.root, ('codex',)))
+        self.assertEqual(destination.read_text(encoding='utf-8'), 'do not modify\n')
+        self.assertEqual(target.read_text(encoding='utf-8'), 'keep me\n')
 
     def test_change_between_plan_and_apply_rejected(self):
         changes = plan(self.root, ('codex',))
