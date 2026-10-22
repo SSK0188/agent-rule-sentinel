@@ -39,7 +39,8 @@ agent-rule-sentinel sync --target claude --apply
 - 不自动联网、不上传文件、不替用户 Git 提交、不自动运行 AI。
 - 检测明显密钥格式、符号链接、超大文件和异常托管标记时拒绝执行。
 - 密钥检测只是启发式检查，**不能代替专业的秘密信息扫描或人工检查**。
-- 备份中可能含敏感内容，需要将 `.agent-rule-sentinel/backups/` 写入使用项目自己的 `.gitignore`。
+- 备份中可能含敏感内容。执行 `sync --apply` 首次保存备份前，程序会自动生成 `.agent-rule-sentinel/backups/.gitignore`，避免普通的 `git add .` 把备份一起提交；你也可以在项目根目录的 `.gitignore` 中添加 `.agent-rule-sentinel/backups/` 作为额外保护。若该位置已有不同的忽略配置，程序会拒绝覆盖，需要先人工核查。
+- Git 忽略规则**不能保护已经被 Git 跟踪的备份文件**，也不能阻止 `git add -f` 强制添加，更不能清理过去的提交历史。已经意外提交的敏感内容需要单独处理。
 
 ## 贡献项目
 
