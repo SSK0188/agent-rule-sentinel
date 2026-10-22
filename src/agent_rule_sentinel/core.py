@@ -54,7 +54,8 @@ def _read(path: Path) -> str | None:
     if path.stat().st_size > MAX_BYTES:
         raise GuardError(f'File exceeds {MAX_BYTES} bytes: {path}')
     try:
-        return path.read_text(encoding='utf-8')
+        with path.open('r', encoding='utf-8', newline='') as stream:
+            return stream.read()
     except (UnicodeDecodeError, OSError) as error:
         raise GuardError(f'Cannot read UTF-8 file {path}: {error}') from error
 
@@ -76,19 +77,21 @@ def validate_source(source: str) -> None:
             raise GuardError('Possible credential in source instructions; inspect before syncing.')
 
 
-def _managed_block(source: str) -> str:
-    return f'{START}\n{source.strip()}\n{END}'
+def _managed_block(source: str, newline: str = '\n') -> str:
+    normalized = source.replace('\r\n', '\n').replace('\r', '\n').strip()
+    return f'{START}{newline}{normalized.replace(chr(10), newline)}{newline}{END}'
 
 
 def render(existing: str | None, source: str) -> str:
     """Replace exactly one managed block; preserve other text byte-for-byte."""
-    block = _managed_block(source)
+    newline = '\r\n' if existing is not None and '\r\n' in existing else '\n'
+    block = _managed_block(source, newline)
     if existing is None:
         return '# AI Agent Project Instructions\n\n' + block + '\n'
     starts, ends = existing.count(START), existing.count(END)
     if starts == 0 and ends == 0:
-        sep = '' if not existing else ('\n' if existing.endswith('\n') else '\n\n')
-        return existing + sep + block + '\n'
+        sep = '' if not existing else (newline if existing.endswith('\n') else newline * 2)
+        return existing + sep + block + newline
     if starts != 1 or ends != 1:
         raise GuardError('Malformed or duplicate managed-block markers; refusing overwrite.')
     start_index = existing.index(START)
