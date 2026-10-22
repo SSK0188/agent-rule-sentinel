@@ -30,3 +30,14 @@ jobs:
       - run: python -m unittest discover -s tests -v
       - run: python -m compileall -q src
       - run: sh scripts/smoke_test.sh
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --upgrade build twine
+      - run: python -m build --sdist --wheel
+      - run: python -m twine check dist/*

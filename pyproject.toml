@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-rule-sentinel"
-version = "0.1.0"
+version = "0.2.0.dev0"
 description = "Review-first, privacy-conscious sync for AI coding agent project instructions"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -25,3 +25,8 @@ agent-rule-sentinel = "agent_rule_sentinel.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[project.urls]
+Homepage = "https://github.com/SSK0188/agent-rule-sentinel"
+Issues = "https://github.com/SSK0188/agent-rule-sentinel/issues"
+Changelog = "https://github.com/SSK0188/agent-rule-sentinel/blob/main/CHANGELOG.md"
