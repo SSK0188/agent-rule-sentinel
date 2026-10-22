@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import difflib
+import hashlib
+import json
 import os
 import re
 import secrets
@@ -12,7 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 SOURCE = Path('.agent-rule-sentinel/source.md')
-TARGETS = {'codex': Path('AGENTS.md'), 'claude': Path('CLAUDE.md')}
+TARGETS = {'codex': Path('AGENTS.md'), 'claude': Path('CLAUDE.md'), 'gemini': Path('GEMINI.md')}
+DEFAULT_TARGETS = ('codex', 'claude')
 START = '<!-- agent-rule-sentinel:BEGIN; managed block; edits will be replaced -->'
 END = '<!-- agent-rule-sentinel:END -->'
 MAX_BYTES = 1024 * 1024
@@ -211,6 +214,21 @@ def apply(root: Path, changes: list[Change]) -> str | None:
                 backup.chmod(0o600)
         for change in dirty:
             _atomic_write(change.path, change.after)
+        manifest = {
+            'schema': 1,
+            'entries': [
+                {
+                    'target': change.target,
+                    'before_sha256': (hashlib.sha256(change.before.encode('utf-8')).hexdigest()
+                                      if change.before is not None else None),
+                    'after_sha256': hashlib.sha256(change.after.encode('utf-8')).hexdigest(),
+                }
+                for change in dirty
+            ],
+        }
+        manifest_file = backup_dir / 'manifest.json'
+        _atomic_write(manifest_file, json.dumps(manifest, indent=2) + '\n')
+        manifest_file.chmod(0o600)
     except Exception:
         # Restore exactly those already changed, preserve created-file absence.
         for change in dirty:
