@@ -32,6 +32,60 @@ agent-rule-sentinel check          # 检测差异，适合 CI
 agent-rule-sentinel sync --target claude --apply
 ```
 
+
+## 开发版新增功能（尚未正式发布）
+
+以下命令属于 0.2.0.dev0 开发版，**此前发布的 v0.1.0 不包含这些功能**。
+
+### 导入旧规则：adopt
+
+对于已经有 AGENTS.md、但还没有执行 init 的项目，可先预览并导入：
+
+~~~bash
+agent-rule-sentinel adopt --target codex
+agent-rule-sentinel adopt --target codex --apply
+~~~
+
+不会改写原有 AGENTS.md。如果共享源文件已经存在，就拒绝覆盖。导入并不自动理解不同助手特有的语法，请人工检查源文件。
+
+### 项目诊断：doctor
+
+~~~bash
+agent-rule-sentinel doctor
+agent-rule-sentinel doctor --json
+~~~
+
+不会写入文件。退出码 0：一致；1：不同步；2：缺失或异常。默认只检查 Codex 和 Claude。
+
+### 安全恢复：undo
+
+~~~bash
+agent-rule-sentinel undo
+agent-rule-sentinel undo --apply
+agent-rule-sentinel undo --target claude --apply
+~~~
+
+默认只预览。新版本同步会保存完整性清单，恢复时验证文件自同步以来没有被修改，避免覆盖后来的人工编辑。原来不存在的目标文件，在内容没有改动时可撤销创建。**v0.1.0 产生的旧备份缺少清单，不能通过 undo 自动恢复，仍应手动恢复。** 预览可能包含隐私文字。
+
+### 可选 Gemini CLI 支持
+
+Gemini CLI 的项目默认规则文件名为 GEMINI.md：
+
+~~~bash
+agent-rule-sentinel plan --target gemini
+agent-rule-sentinel sync --target gemini --apply
+agent-rule-sentinel check --all
+~~~
+
+为保障老项目兼容，默认仍只处理 Codex 与 Claude。Gemini CLI 可以自定义上下文文件名，也支持 @ 文件导入；本工具目前只处理项目根目录 GEMINI.md 内的 Markdown 托管块，不解析导入和特有语义。
+
+### GitHub Actions 和 PyPI 状态
+
+参见 `examples/github-actions-agent-rules.yml`，可以放到实际项目的 `.github/workflows/` 下，检查 AI 规则是否一致。正式使用时应将示例安装源固定到经过验证的提交。
+
+CI 已增加 Python 安装包构建检查，**尚未公开发布 PyPI 包**。请先通过克隆源代码的方式安装。
+
+
 ## 保护规则
 
 - 原有 `AGENTS.md` 和 `CLAUDE.md` 中托管块之外的文字保留。
