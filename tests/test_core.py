@@ -63,6 +63,32 @@ class ProjectTest(unittest.TestCase):
         self.assertTrue(text.endswith('\nafter\n'))
         self.assertNotIn('\nold\n', text)
 
+    def test_crlf_existing_file_preserved_and_backup_exact(self):
+        target = self.root / 'AGENTS.md'
+        original = b'# My rules\r\nKeep this line\r\n'
+        target.write_bytes(original)
+        changes = plan(self.root, ('codex',))
+        self.assertEqual(changes[0].before.encode('utf-8'), original)
+        backup_dir = Path(apply(self.root, changes))
+        written = target.read_bytes()
+        self.assertTrue(written.startswith(original))
+        self.assertIn((START + '\r\n').encode(), written)
+        self.assertIn(('\r\n' + END + '\r\n').encode(), written)
+        self.assertEqual((backup_dir / 'AGENTS.md').read_bytes(), original)
+        self.assertFalse(plan(self.root, ('codex',))[0].dirty)
+
+    def test_crlf_managed_block_preserves_surrounding_content(self):
+        target = self.root / 'CLAUDE.md'
+        original = ('Before\r\n' + START + '\r\nOld rules\r\n'
+                    + END + '\r\nAfter\r\n').encode('utf-8')
+        target.write_bytes(original)
+        apply(self.root, plan(self.root, ('claude',)))
+        result = target.read_bytes()
+        self.assertTrue(result.startswith(('Before\r\n' + START + '\r\n').encode()))
+        self.assertTrue(result.endswith(('\r\n' + END + '\r\nAfter\r\n').encode()))
+        self.assertNotIn(b'Old rules', result)
+        self.assertFalse(plan(self.root, ('claude',))[0].dirty)
+
     def test_detects_corrupt_markers(self):
         for content in [START, END, END+'\n'+START, START+'\n'+START+'\n'+END]:
             with self.subTest(content=content):
