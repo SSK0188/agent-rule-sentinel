@@ -60,7 +60,7 @@ agent-rule-sentinel --root /path/to/project check
 
 If `AGENTS.md` or `CLAUDE.md` does not exist, the tool creates it **only with `sync --apply`**. If it exists without the tool's markers, the tool **appends** a marked block, preserving earlier content. Subsequent synchronizations replace only the marked block. If markers are malformed or duplicated, the tool stops rather than guessing.
 
-Private backups are stored in `.agent-rule-sentinel/backups/<UTC timestamp>-<random>/` within your project. To restore an existing file, inspect the backup and manually copy it back. The tool does not auto-delete backups. The backup folder is created with owner-only permissions; the directory is excluded via this repository's `.gitignore`, and you should add the same entry to the `.gitignore` in projects using this tool.
+Private backups are stored in `.agent-rule-sentinel/backups/<UTC timestamp>-<random>/` within your project. To restore an existing file, inspect the backup and manually copy it back. The tool does not auto-delete backups. The backup directory uses owner-only permissions. Starting with the next update, the tool creates a scoped `.agent-rule-sentinel/backups/.gitignore` **before** saving snapshots so an ordinary `git add .` will not stage them even if your project lacks a root ignore rule. The harmless backup `.gitignore` file itself can be staged. If a different backup ignore file already exists, the tool refuses to overwrite it; inspect that file before retrying. Previously tracked files, forced additions (`git add -f`), and secrets in existing Git history are **not** protected by ignore rules. You can also add the directory to your project's top-level `.gitignore` as defense in depth.
 
 ```gitignore
 .agent-rule-sentinel/backups/
