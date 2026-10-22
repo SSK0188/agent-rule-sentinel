@@ -1,0 +1,26 @@
+# Copy this example to .github/workflows/agent-rules.yml in YOUR project.
+# Before enabling, commit your project's .agent-rule-sentinel/source.md and
+# managed AGENTS.md / CLAUDE.md files (and GEMINI.md only if you opt in).
+# Pin to a verified release tag or commit SHA in production instead of @main.
+name: Agent instruction drift
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Agent Rule Sentinel
+        run: python -m pip install "git+https://github.com/SSK0188/agent-rule-sentinel.git@main"
+      - name: Detect instruction drift (read-only)
+        run: agent-rule-sentinel check
+        # Include --all after explicitly adding GEMINI.md to your project.
