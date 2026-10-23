@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Reliability and onboarding
+
+- Prevent duplicate instructions when `adopt` is followed by `sync`: identical unmanaged rules become a single managed block, with existing line endings preserved.
+- Add a read-only `undo --list` command to discover compatible backup snapshots without exposing private backup contents.
+- Prefer the newest snapshot by directory modification time rather than sorting a random name suffix within the same second.
+- Strengthen `init` against concurrent source creation by using exclusive file creation.
+- Extend regression tests for adoption, CRLF, backup listing, and initialization races.
+
+
 ### Development features (0.2.0.dev0)
 
 - Add manifest-backed conflict-aware undo of newer backup snapshots.
