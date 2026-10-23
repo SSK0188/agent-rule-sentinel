@@ -46,7 +46,7 @@ agent-rule-sentinel adopt --target codex
 agent-rule-sentinel adopt --target codex --apply
 ~~~
 
-不会改写原有 AGENTS.md。如果共享源文件已经存在，就拒绝覆盖。导入并不自动理解不同助手特有的语法，请人工检查源文件。
+导入操作不会修改原来的 AGENTS.md；如果共享规则源已存在，则拒绝覆盖。导入后第一次同步时，如果原目标文件的完整内容与规则源等价，就只给现有内容增加托管标记，不重复追加规则；其他有独立内容的目标仍采用追加方式，需人工检查是否冲突。工具不会自动翻译不同助手的特有语法。
 
 ### 项目诊断：doctor
 
@@ -60,12 +60,13 @@ agent-rule-sentinel doctor --json
 ### 安全恢复：undo
 
 ~~~bash
-agent-rule-sentinel undo
+agent-rule-sentinel undo --list   # 只列出可用备份快照名称
+agent-rule-sentinel undo          # 预览恢复内容
 agent-rule-sentinel undo --apply
 agent-rule-sentinel undo --target claude --apply
 ~~~
 
-默认只预览。新版本同步会保存完整性清单，恢复时验证文件自同步以来没有被修改，避免覆盖后来的人工编辑。原来不存在的目标文件，在内容没有改动时可撤销创建。**v0.1.0 产生的旧备份缺少清单，不能通过 undo 自动恢复，仍应手动恢复。** 预览可能包含隐私文字。
+默认只预览。新版本同步会保存完整性清单，恢复时验证文件自同步以来没有被修改，避免覆盖后来的人工编辑。原来不存在的目标文件，在内容没有改动时可撤销创建。**v0.1.0 产生的旧备份缺少清单，不能通过 undo 自动恢复，仍应手动恢复。** `undo --list` 只输出兼容的快照名称，不会展示原文件内容。选择指定快照可使用 `undo --snapshot 快照名称`。普通恢复预览可能包含隐私文字。
 
 ### 可选 Gemini CLI 支持
 

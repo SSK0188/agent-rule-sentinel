@@ -25,6 +25,31 @@ class ProjectTest(unittest.TestCase):
         with self.assertRaises(GuardError):
             initialize(self.root)
 
+    def test_init_refuses_concurrent_source_creation_without_overwrite(self):
+        source = self.root / SOURCE
+        source.unlink()
+        original_open = Path.open
+
+        def competing_create(path, *args, **kwargs):
+            if path == source and args and args[0] == 'x':
+                with original_open(source, 'w', encoding='utf-8') as stream:
+                    stream.write('Concurrent user content\n')
+            return original_open(path, *args, **kwargs)
+
+        with patch.object(Path, 'open', autospec=True, side_effect=competing_create):
+            with self.assertRaises(GuardError):
+                initialize(self.root)
+        self.assertEqual(source.read_text(encoding='utf-8'),
+                         'Concurrent user content\n')
+
+    def test_identical_unmanaged_file_gets_managed_without_duplication(self):
+        body = '# Shared rules\nDo not duplicate this text.\n'
+        converted = render(body, body)
+        self.assertEqual(converted.count('Do not duplicate this text.'), 1)
+        self.assertEqual(converted.count(START), 1)
+        self.assertEqual(converted.count(END), 1)
+        self.assertEqual(render(converted, body), converted)
+
     def test_init_does_not_create_target(self):
         for relative in TARGETS.values():
             self.assertFalse((self.root / relative).exists())

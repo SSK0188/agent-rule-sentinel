@@ -49,22 +49,43 @@ def _snapshot_path(root: Path, snapshot: str) -> Path:
     return backup_dir
 
 
+def list_snapshots(root: Path) -> list[str]:
+    """List compatible snapshots without revealing private backup contents."""
+    guard = _checked_path(root, Path('.agent-rule-sentinel/backups/.gitignore'))
+    backups = guard.parent
+    if not backups.exists():
+        return []
+    candidates: list[tuple[int, str]] = []
+    for item in backups.iterdir():
+        if not _SNAPSHOT_NAME.fullmatch(item.name) or item.is_symlink() or not item.is_dir():
+            continue
+        try:
+            manifest = _checked_path(
+                root, Path('.agent-rule-sentinel/backups') / item.name / 'manifest.json'
+            )
+            if not manifest.is_file():
+                continue
+            # Ignore unsuitable snapshot directories rather than listing unusable entries.
+            if stat.S_IMODE(item.stat().st_mode) & 0o077:
+                continue
+            candidates.append((item.stat().st_mtime_ns, item.name))
+        except OSError:
+            continue
+        except GuardError:
+            continue
+    # Use actual directory modification times rather than the random suffix
+    # when two snapshots were produced in the same second.
+    return [name for _, name in sorted(candidates, reverse=True)]
+
+
 def _choose_snapshot(root: Path, requested: str | None) -> str:
     if requested is not None:
         _snapshot_path(root, requested)
         return requested
-    _checked_path(root, Path('.agent-rule-sentinel/backups/.gitignore'))
-    backups = root.expanduser().absolute() / '.agent-rule-sentinel' / 'backups'
-    if not backups.exists():
-        raise GuardError('No backup snapshots exist; undo is unavailable.')
-    candidates = [
-        item.name for item in backups.iterdir()
-        if _SNAPSHOT_NAME.fullmatch(item.name) and
-        not item.is_symlink() and item.is_dir() and (item / 'manifest.json').exists()
-    ]
+    candidates = list_snapshots(root)
     if not candidates:
         raise GuardError('No compatible backup snapshots. Older backups require manual restoration.')
-    return sorted(candidates)[-1]
+    return candidates[0]
 
 
 def plan_undo(root: Path, target: tuple[str, ...] | None = None,

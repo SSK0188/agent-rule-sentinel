@@ -3,6 +3,7 @@ import contextlib
 import hashlib
 import io
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,7 +11,7 @@ from pathlib import Path
 from agent_rule_sentinel.cli import main
 from agent_rule_sentinel.core import END, SOURCE, START, GuardError, apply, initialize, plan
 from agent_rule_sentinel.features import (
-    apply_adopt, apply_undo, diagnose, plan_adopt, plan_undo, preview_undo,
+    apply_adopt, apply_undo, diagnose, list_snapshots, plan_adopt, plan_undo, preview_undo,
 )
 
 
@@ -75,6 +76,73 @@ class FeatureTest(unittest.TestCase):
         self.assertEqual(self.cli('adopt', '--target', 'codex', '--apply'), 0)
         self.assertEqual((self.root / SOURCE).read_bytes(), original.encode('utf-8'))
         self.assertEqual((self.root / 'AGENTS.md').read_bytes(), original.encode('utf-8'))
+
+    def test_adopt_then_sync_wraps_once_without_duplicate_rules(self):
+        original = b'# Our rules\r\nUse typed Python\r\nRun unit tests\r\n'
+        target = self.root / 'AGENTS.md'
+        target.write_bytes(original)
+        self.assertEqual(self.cli('adopt', '--target', 'codex', '--apply'), 0)
+        self.assertEqual(self.cli('sync', '--target', 'codex'), 0)
+        self.assertEqual(target.read_bytes(), original)
+        self.assertEqual(self.cli('sync', '--target', 'codex', '--apply'), 0)
+        changed = target.read_bytes()
+        self.assertEqual(changed.count(b'Use typed Python'), 1)
+        self.assertEqual(changed.count(START.encode()), 1)
+        self.assertIn((START + '\r\n').encode(), changed)
+        self.assertFalse(plan(self.root, ('codex',))[0].dirty)
+        self.assertEqual(self.cli('undo', '--target', 'codex', '--apply'), 0)
+        self.assertEqual(target.read_bytes(), original)
+
+    def test_unequal_unmanaged_target_still_preserves_unmanaged_text(self):
+        initialize(self.root)
+        target = self.root / 'AGENTS.md'
+        original = 'Project-specific requirement\n'
+        target.write_text(original, encoding='utf-8')
+        self.assertEqual(self.cli('sync', '--target', 'codex', '--apply'), 0)
+        new_content = target.read_text(encoding='utf-8')
+        self.assertTrue(new_content.startswith(original))
+        self.assertIn(START, new_content)
+
+    def test_undo_list_is_read_only_and_excludes_legacy_snapshots(self):
+        self.assertEqual(self.cli('undo', '--list'), 0)
+        self.assertFalse((self.root / '.agent-rule-sentinel').exists())
+        initialize(self.root)
+        old = self.root / '.agent-rule-sentinel/backups/20260101T000000Z-aabbccdd'
+        old.mkdir(parents=True, mode=0o700)
+        old.parent.chmod(0o700)
+        (old / 'AGENTS.md').write_text('legacy backup')
+        self.assertEqual(list_snapshots(self.root), [])
+        target = self.root / 'AGENTS.md'
+        target.write_text('Original\n')
+        self.assertEqual(self.cli('sync', '--target', 'codex', '--apply'), 0)
+        listed = list_snapshots(self.root)
+        self.assertEqual(len(listed), 1)
+        self.assertNotIn(old.name, listed)
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(main(['--root', str(self.root), 'undo', '--list']), 0)
+        self.assertIn(listed[0], out.getvalue())
+        self.assertNotIn('Original', out.getvalue())
+        self.assertEqual(self.cli('undo', '--list', '--apply'), 2)
+        self.assertEqual(self.cli('undo', '--list', '--target', 'codex'), 2)
+        self.assertEqual(self.cli('undo', '--list', '--snapshot', listed[0]), 2)
+
+    def test_undo_list_uses_actual_order_not_random_snapshot_suffix(self):
+        initialize(self.root)
+        self.assertEqual(self.cli('sync', '--target', 'codex', '--apply'), 0)
+        first = list_snapshots(self.root)[0]
+        source = self.root / SOURCE
+        source.write_text(source.read_text(encoding='utf-8') + '\nUse a formatter.\n',
+                          encoding='utf-8')
+        self.assertEqual(self.cli('sync', '--target', 'codex', '--apply'), 0)
+        newest = list_snapshots(self.root)[0]
+        self.assertNotEqual(newest, first)
+        base = self.root / '.agent-rule-sentinel/backups'
+        os.utime(base / first, ns=(2_000_000_000, 2_000_000_000))
+        os.utime(base / newest, ns=(1_000_000_000, 1_000_000_000))
+        self.assertEqual(list_snapshots(self.root), [first, newest])
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(main(['--root', str(self.root), 'undo', '--list']), 0)
+        self.assertLess(out.getvalue().index(first), out.getvalue().index(newest))
 
     def test_adopt_does_not_overwrite_existing_source(self):
         initialize(self.root)

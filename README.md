@@ -70,7 +70,7 @@ agent-rule-sentinel adopt --target codex          # preview (size and SHA-256)
 agent-rule-sentinel adopt --target codex --apply  # create canonical source
 ~~~
 
-Adoption refuses existing canonical source files, managed markers, symlinks and recognizable secret patterns. It **does not** translate tool-specific syntax or merge conflicting rules. Review the imported content before syncing to other assistants.
+Adoption refuses existing canonical source files, managed markers, symlinks and recognizable secret patterns. On the first subsequent `sync` for the adopted target, equivalent unmanaged rules are wrapped in managed markers **without duplicating them**. A different target with unique existing text still receives an appended block; review any competing instructions. The command **does not** translate tool-specific syntax or merge conflicting rules.
 
 **Diagnose project health without changing files:**
 
@@ -84,13 +84,14 @@ Exit code: 0 = targets synchronized; 1 = drift; 2 = invalid input or missing sou
 **Preview and restore a newer backup snapshot:**
 
 ~~~bash
+agent-rule-sentinel undo --list           # list eligible snapshots, newest first
 agent-rule-sentinel undo                  # show restore plan, do not write
 agent-rule-sentinel undo --apply          # restore only unchanged destinations
 agent-rule-sentinel undo --target codex --apply
 agent-rule-sentinel undo --snapshot SNAPSHOT_NAME
 ~~~
 
-Backups created by this development version include an integrity-checked manifest recording previous and generated file hashes. Undo refuses to overwrite files modified after sync, and can remove newly created target files if they are still unchanged. **Old backups without manifests must be restored manually.** Previews can display sensitive content; do not share private diff output.
+Backups created by this development version include an integrity-checked manifest recording previous and generated file hashes. Undo refuses to overwrite files modified after sync, and can remove newly created target files if they are still unchanged. **Old backups without manifests must be restored manually.** `undo --list` shows only compatible snapshot names, not the contents of private files. Previews can display sensitive content; do not share private diff output.
 
 **Opt in to Gemini CLI project rules:**
 
@@ -109,7 +110,7 @@ For compatibility, default sync still covers only Codex and Claude. Gemini CLI n
 
 ### What happens to my existing files?
 
-If `AGENTS.md` or `CLAUDE.md` does not exist, the tool creates it **only with `sync --apply`**. If it exists without the tool's markers, the tool **appends** a marked block, preserving earlier content. Subsequent synchronizations replace only the marked block. If markers are malformed or duplicated, the tool stops rather than guessing.
+If `AGENTS.md` or `CLAUDE.md` does not exist, the tool creates it **only with `sync --apply`**. If it exists without markers, the tool usually **appends** a marked block, preserving earlier content. If its entire unmanaged body matches the canonical source, the tool wraps that single copy with managed markers instead of duplicating the rules. Subsequent synchronizations replace only the marked block. If markers are malformed or duplicated, the tool stops rather than guessing.
 
 Private backups are stored in `.agent-rule-sentinel/backups/<UTC timestamp>-<random>/` within your project. To restore an existing file, inspect the backup and manually copy it back. The tool does not auto-delete backups. The backup directory uses owner-only permissions. Starting with the next update, the tool creates a scoped `.agent-rule-sentinel/backups/.gitignore` **before** saving snapshots so an ordinary `git add .` will not stage them even if your project lacks a root ignore rule. The harmless backup `.gitignore` file itself can be staged. If a different backup ignore file already exists, the tool refuses to overwrite it; inspect that file before retrying. Previously tracked files, forced additions (`git add -f`), and secrets in existing Git history are **not** protected by ignore rules. You can also add the directory to your project's top-level `.gitignore` as defense in depth.
 
