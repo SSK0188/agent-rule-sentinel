@@ -109,6 +109,7 @@ class FeatureTest(unittest.TestCase):
         initialize(self.root)
         old = self.root / '.agent-rule-sentinel/backups/20260101T000000Z-aabbccdd'
         old.mkdir(parents=True, mode=0o700)
+        old.parent.chmod(0o700)
         (old / 'AGENTS.md').write_text('legacy backup')
         self.assertEqual(list_snapshots(self.root), [])
         target = self.root / 'AGENTS.md'
