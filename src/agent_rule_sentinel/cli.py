@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .core import DEFAULT_TARGETS, GuardError, TARGETS, apply, initialize, plan, preview
 from .features import (
-    apply_adopt, apply_undo, diagnose, plan_adopt, plan_undo, preview_undo,
+    apply_adopt, apply_undo, diagnose, list_snapshots, plan_adopt, plan_undo, preview_undo,
 )
 
 VERSION = '0.2.0.dev0'
@@ -58,6 +58,8 @@ def main(argv: list[str] | None = None) -> int:
                       help='Restore only a selected target in the snapshot')
     undo.add_argument('--apply', action='store_true',
                       help='Restore saved files only if current content is unchanged')
+    undo.add_argument('--list', action='store_true',
+                      help='List compatible local snapshots without reading file contents')
 
     args = parser.parse_args(argv)
     try:
@@ -74,6 +76,17 @@ def main(argv: list[str] | None = None) -> int:
                 print('Preview only. Add --apply to create the shared source.')
             return 0
         if args.command == 'undo':
+            if args.list:
+                if args.apply or args.snapshot or args.target:
+                    raise GuardError('--list cannot be combined with --apply, --snapshot or --target.')
+                names = list_snapshots(args.root)
+                if names:
+                    print('Available recovery snapshots (newest first):')
+                    for name in names:
+                        print(name)
+                else:
+                    print('No compatible recovery snapshots found. Older backups require manual restore.')
+                return 0
             recovery = plan_undo(args.root, tuple(args.target) if args.target else None,
                                  args.snapshot)
             print(preview_undo(recovery))
