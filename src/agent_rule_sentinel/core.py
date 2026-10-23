@@ -93,6 +93,12 @@ def render(existing: str | None, source: str) -> str:
         return '# AI Agent Project Instructions\n\n' + block + '\n'
     starts, ends = existing.count(START), existing.count(END)
     if starts == 0 and ends == 0:
+        # An adopted file may already *be* the canonical source. Wrapping that
+        # one copy avoids appending an identical second set of instructions.
+        # Only do this for equivalent complete bodies, never for partial matches.
+        normalize = lambda text: text.replace('\r\n', '\n').replace('\r', '\n').strip()
+        if normalize(existing) == normalize(source):
+            return block + newline
         sep = '' if not existing else (newline if existing.endswith('\n') else newline * 2)
         return existing + sep + block + newline
     if starts != 1 or ends != 1:
@@ -250,11 +256,19 @@ def initialize(root: Path) -> Path:
     if path.exists():
         raise GuardError(f'Source exists; refusing to overwrite {path}')
     path.parent.mkdir(parents=True, exist_ok=True)
-    _atomic_write(path, (
+    template = (
         '# Shared project guidance\n\n'
         '- Describe the project purpose and architecture here.\n'
         '- Explain how to run tests.\n'
         '- List the coding style, review and safety expectations.\n'
         '- Never put keys, passwords or personal secrets here.\n'
-    ))
+    )
+    # Exclusive creation prevents a concurrent init/adopt from being overwritten.
+    try:
+        with path.open('x', encoding='utf-8', newline='') as stream:
+            stream.write(template)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except FileExistsError as error:
+        raise GuardError(f'Source appeared during initialization: {path}') from error
     return path
